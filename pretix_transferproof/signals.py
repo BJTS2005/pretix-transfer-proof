@@ -2,7 +2,7 @@ from django.dispatch import receiver
 from django.templatetags.static import static
 
 from pretix.base.signals import register_payment_providers
-from pretix.presale.signals import html_head, order_meta_from_request
+from pretix.presale.signals import global_footer_link, html_head, order_meta_from_request
 
 from .payment import TransferProofProvider
 
@@ -31,4 +31,12 @@ def transferproof_order_meta(sender, request, **kwargs):
     return {
         "transferproof_cf": cf_id,
         "transferproof_cart": get_or_create_cart_id(request, create=False),
+    }
+
+
+@receiver(global_footer_link, dispatch_uid="transferproof_footer_link")
+def transferproof_footer_link(sender, request=None, **kwargs):
+    return {
+        "label": "Código del plugin de transferencia",
+        "url": "https://github.com/BJTS2005/pretix-transfer-proof",
     }
