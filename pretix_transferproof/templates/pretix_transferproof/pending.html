@@ -1,0 +1,14 @@
+{% load i18n %}
+{% load money %}
+{% load rich_text %}
+<p>{% trans "Transfiere el valor a esta cuenta:" %}</p>
+<dl class="dl-horizontal">
+    <dt>{% trans "Monto" %}</dt>
+    <dd>{{ amount|money:event.currency }}</dd>
+</dl>
+<div class="well">{{ details|rich_text }}</div>
+{% if proof %}
+    <p>{% trans "Recibimos tu comprobante. El pago sigue pendiente hasta que lo confirmemos." %}</p>
+{% else %}
+    <p>{% trans "Todavía no hay comprobante. Puedes subirlo al cambiar el método de pago." %}</p>
+{% endif %}

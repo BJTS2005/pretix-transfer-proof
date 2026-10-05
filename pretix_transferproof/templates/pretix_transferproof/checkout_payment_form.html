@@ -1,0 +1,22 @@
+{% load i18n %}
+{% load rich_text %}
+
+<p>{% trans "Transfiere el valor a esta cuenta y sube el comprobante." %}</p>
+<div class="well">
+    {{ details|rich_text }}
+</div>
+{% if required %}
+    <p><strong>{% trans "El comprobante es obligatorio." %}</strong></p>
+{% else %}
+    <p>{% trans "El comprobante es opcional. Puedes subirlo ahora o después, al editar el pago." %}</p>
+{% endif %}
+{{ form.as_p }}
+<script>
+(function () {
+    var node = document.currentScript;
+    var form = node && node.closest("form");
+    if (form) {
+        form.setAttribute("enctype", "multipart/form-data");
+    }
+})();
+</script>

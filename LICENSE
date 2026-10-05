@@ -1,0 +1,51 @@
+Licencia de pretix-transfer-proof
+=================================
+
+Copyright 2026 Bryan Tandayamo
+
+Este plugin se publica bajo la GNU Affero General Public License, versión 3.0,
+tal como la publica la Free Software Foundation (AGPLv3). El texto completo está
+en https://www.gnu.org/licenses/agpl-3.0.txt y debe acompañar cualquier copia.
+
+Este programa no es un plugin oficial de pretix. No está autorizado ni
+distribuido por pretix GmbH.
+
+Como términos adicionales, conforme a la sección 7 de la AGPLv3, se aplican los
+mismos términos adicionales de pretix. Están copiados de la licencia de pretix
+para que este plugin pueda usarse junto con pretix bajo la misma licencia:
+
+1. You are permitted to use pretix or combined or modified versions of pretix
+   without respecting GNU AGPL section 13 (Remote Network Interaction) as long
+   as you follow all of the additional terms in this document and do NOT use
+   pretix for any of the following purposes:
+
+   a) Making the functionality of pretix available to third parties as a
+      service (SaaS),
+
+   b) Offering a service the value of which entirely or primarily derives from
+      the value of pretix or the combined or modified version of pretix,
+
+   c) Offering a service that accomplishes for users the primary purpose of
+      pretix or the combined or modified version of pretix,
+
+   d) Using pretix to organize, promote, or sell products or services offered
+      or executed by third parties.
+
+2. Pursuant to AGPLv3, Section 7 (b), you are not allowed to remove the
+   attribution notice indicating the generated website is built using pretix at
+   the bottom of all generated web pages. If you run a modified version of
+   pretix, you are allowed to rephrase it to indicate a combined work in a form
+   similar to "powered by <Company> based on pretix, source code available at
+   <location>". The word pretix must be a link to https://pretix.eu/.
+
+3. Pursuant to AGPLv3, Section 7 (c), if you distribute a modified version in
+   source or binary form, or if you offer usage of a modified version to third
+   parties (SaaS), it is important to be clear about what kind of modifications
+   the distributed work contains. You may not give the impression that the work
+   being distributed or the service provided is an authorized or original
+   distribution by pretix.
+
+Si este plugin se usa para vender u organizar entradas de terceros, el permiso
+adicional del punto 1 no aplica. En ese caso hay que ofrecer el código fuente
+de este plugin, bajo esta misma licencia, a quien visite la boletería, con un
+enlace visible en el pie junto al enlace de código de pretix.

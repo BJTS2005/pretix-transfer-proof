@@ -1,0 +1,9 @@
+{% load i18n %}
+{% load rich_text %}
+<p>{% trans "Pagarás por transferencia a esta cuenta:" %}</p>
+<div class="well">{{ details|rich_text }}</div>
+{% if has_file %}
+    <p>{% trans "Comprobante adjunto. El pago queda pendiente hasta que lo revisemos." %}</p>
+{% else %}
+    <p>{% trans "Sin comprobante. Puedes subirlo después al editar el pago." %}</p>
+{% endif %}

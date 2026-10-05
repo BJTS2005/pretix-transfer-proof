@@ -1,0 +1,10 @@
+{% load i18n %}
+{% if proof %}
+    <p>
+        <a href="{% url 'plugins:pretix_transferproof:download' organizer=event.organizer.slug event=event.slug code=order.code %}" target="_blank">
+            <img src="{% url 'plugins:pretix_transferproof:download' organizer=event.organizer.slug event=event.slug code=order.code %}" alt="{% trans "Comprobante" %}" style="max-width: 240px; max-height: 180px; border: 1px solid #ddd; border-radius: 4px;">
+        </a>
+    </p>
+{% else %}
+    <p>{% trans "Esta orden no tiene comprobante." %}</p>
+{% endif %}
