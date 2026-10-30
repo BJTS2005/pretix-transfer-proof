@@ -79,7 +79,7 @@ class TransferProofProvider(BasePaymentProvider):
     def public_name(self):
         return str(self.settings.get("public_name") or self.verbose_name)
 
-        @property
+    @property
     def settings_form_fields(self):
         base = super().settings_form_fields
         return OrderedDict(
