@@ -113,16 +113,13 @@ class TransferProofProvider(BasePaymentProvider):
                         ),
                     ),
                 ),
-                (
-                    "extra_fields",
-                    forms.CharField(
-                        label=_("Campos adicionales"),
-                        required=False,
-                        widget=forms.Textarea(attrs={"rows": 8, "class": "extra-fields-json"}),
-                        help_text=_(
-                            "JSON de campos que el comprador debe llenar. "
-                            "Ejemplo: [{"label":"Referencia","type":"text","required":true}, "
-                            "{"label":"Banco","type":"choice","required":false,"options":["Pichincha","Guayaquil"]}]"
+                                    (
+                        "extra_fields",
+                        forms.CharField(
+                            label=_("Campos adicionales"),
+                            required=False,
+                            widget=forms.Textarea(attrs={"rows": 8, "class": "extra-fields-json"}),
+                            help_text=_("JSON de campos que el comprador debe llenar. Ejemplo: [{\"label\":\"Referencia\",\"type\":\"text\",\"required\":true}]"),
                         ),
                     ),
                 ),
