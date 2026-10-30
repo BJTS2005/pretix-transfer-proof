@@ -1,10 +1,25 @@
 {% load i18n %}
 {% if proof %}
     <p>
-        <a href="{% url 'plugins:pretix_transferproof:download' organizer=event.organizer.slug event=event.slug code=order.code %}" target="_blank">
-            <img src="{% url 'plugins:pretix_transferproof:download' organizer=event.organizer.slug event=event.slug code=order.code %}" alt="{% trans "Comprobante" %}" style="max-width: 240px; max-height: 180px; border: 1px solid #ddd; border-radius: 4px;">
+        <a href="{{ url }}" target="_blank" rel="noopener">
+            <img src="{{ url }}" alt="{% trans "Comprobante" %}"
+                 style="max-width: 240px; max-height: 180px; border: 1px solid #ddd; border-radius: 4px;">
         </a>
+        <br>
+        <small class="text-muted">
+            {% blocktrans trimmed with date=proof.created|date:"SHORT_DATETIME_FORMAT" %}
+                Subido el {{ date }}
+            {% endblocktrans %}
+        </small>
     </p>
 {% else %}
-    <p>{% trans "Esta orden no tiene comprobante." %}</p>
+    <p>{% trans "Este pago no tiene comprobante." %}</p>
+{% endif %}
+{% if answers %}
+    <dl class="dl-horizontal">
+        {% for a in answers %}
+            <dt>{{ a.label }}</dt>
+            <dd>{{ a.value }}</dd>
+        {% endfor %}
+    </dl>
 {% endif %}

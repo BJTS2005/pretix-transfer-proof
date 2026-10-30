@@ -1,12 +1,15 @@
-from django.db import migrations, models
 import django.db.models.deletion
+from django.db import migrations, models
+
 import pretix_transferproof.models
 
 
 class Migration(migrations.Migration):
     initial = True
     dependencies = [
-        ("pretixbase", "0306_alter_eventmetaproperty_unique_together"),
+        # OrderPayment was created in this migration (pretix 2.0, 2018). Depending on a much newer
+        # pretix migration (0306, only in pretix >= 2026.7) made `migrate` fail on older installs.
+        ("pretixbase", "0096_auto_20180722_0801"),
     ]
 
     operations = [

@@ -1,0 +1,33 @@
+[project]
+name = "pretix-transfer-proof"
+dynamic = ["version"]
+description = "Transferencia bancaria con comprobante PNG/JPG y campos adicionales para pretix"
+readme = "README.md"
+license = {text = "AGPL-3.0-only WITH pretix-additional-terms"}
+keywords = ["pretix"]
+authors = [
+    {name = "Bryan Tandayamo"},
+]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.urls]
+homepage = "https://github.com/BJTS2005/pretix-transfer-proof"
+repository = "https://github.com/BJTS2005/pretix-transfer-proof"
+
+[project.entry-points."pretix.plugin"]
+pretix_transferproof = "pretix_transferproof:PretixPluginMeta"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "pretix_transferproof.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["pretix_transferproof*"]
+namespaces = false

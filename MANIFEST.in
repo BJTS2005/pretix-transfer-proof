@@ -1,2 +1,3 @@
-include pretix_transferproof/templates/pretix_transferproof/*.html
-include pretix_transferproof/static/pretix_transferproof/*.js
+recursive-include pretix_transferproof/templates *
+recursive-include pretix_transferproof/static *
+include LICENSE

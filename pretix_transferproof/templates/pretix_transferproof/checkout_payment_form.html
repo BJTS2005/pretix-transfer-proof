@@ -1,22 +1,26 @@
 {% load i18n %}
+{% load bootstrap3 %}
 {% load rich_text %}
-
 <p>{% trans "Transfiere el valor a esta cuenta y sube el comprobante." %}</p>
-<div class="well">
-    {{ details|rich_text }}
-</div>
-{% if required %}
+<div class="well">{{ details|rich_text }}</div>
+{% if current %}
+    <div class="alert alert-info">
+        {% if current.url %}
+            {% blocktrans trimmed with name=current.name url=current.url %}
+                Ya subiste el comprobante <a href="{{ url }}" target="_blank" rel="noopener">{{ name }}</a>.
+            {% endblocktrans %}
+        {% else %}
+            {% blocktrans trimmed with name=current.name %}
+                Ya subiste el comprobante «{{ name }}».
+            {% endblocktrans %}
+        {% endif %}
+        {% trans "Sube otro solo si quieres reemplazarlo." %}
+    </div>
+{% elif required %}
     <p><strong>{% trans "El comprobante es obligatorio." %}</strong></p>
 {% else %}
-    <p>{% trans "El comprobante es opcional. Puedes subirlo ahora o después, al editar el pago." %}</p>
+    <p>{% trans "El comprobante es opcional: puedes subirlo ahora o después, desde tu pedido." %}</p>
 {% endif %}
-{{ form.as_p }}
-<script>
-(function () {
-    var node = document.currentScript;
-    var form = node && node.closest("form");
-    if (form) {
-        form.setAttribute("enctype", "multipart/form-data");
-    }
-})();
-</script>
+<div class="form-horizontal">
+    {% bootstrap_form form layout="horizontal" %}
+</div>

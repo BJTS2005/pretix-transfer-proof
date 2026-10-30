@@ -1,1 +1,1 @@
-default_app_config = "pretix_transferproof.apps.TransferProofApp"
+__version__ = "2.0.0"
