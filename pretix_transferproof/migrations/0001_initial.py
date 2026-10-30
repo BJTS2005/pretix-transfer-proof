@@ -6,7 +6,7 @@ import pretix_transferproof.models
 class Migration(migrations.Migration):
     initial = True
     dependencies = [
-        ("pretixbase", "0311_fix_unshredded_invoices"),
+        ("pretixbase", "0306_alter_eventmetaproperty_unique_together"),
     ]
 
     operations = [
