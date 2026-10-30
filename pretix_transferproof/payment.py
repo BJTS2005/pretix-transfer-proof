@@ -79,7 +79,7 @@ class TransferProofProvider(BasePaymentProvider):
     def public_name(self):
         return str(self.settings.get("public_name") or self.verbose_name)
 
-    @property
+        @property
     def settings_form_fields(self):
         base = super().settings_form_fields
         return OrderedDict(
@@ -113,14 +113,13 @@ class TransferProofProvider(BasePaymentProvider):
                         ),
                     ),
                 ),
-                                    (
-                        "extra_fields",
-                        forms.CharField(
-                            label=_("Campos adicionales"),
-                            required=False,
-                            widget=forms.Textarea(attrs={"rows": 8, "class": "extra-fields-json"}),
-                            help_text=_("JSON de campos que el comprador debe llenar. Ejemplo: [{\"label\":\"Referencia\",\"type\":\"text\",\"required\":true}]"),
-                        ),
+                (
+                    "extra_fields",
+                    forms.CharField(
+                        label=_("Campos adicionales"),
+                        required=False,
+                        widget=forms.Textarea(attrs={"rows": 8, "class": "extra-fields-json"}),
+                        help_text=_("JSON de campos que el comprador debe llenar. Ejemplo: [{\"label\":\"Referencia\",\"type\":\"text\",\"required\":true}]"),
                     ),
                 ),
             ]
