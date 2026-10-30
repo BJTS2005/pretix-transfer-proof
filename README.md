@@ -4,7 +4,7 @@ Plugin no oficial para pretix. Muestra los datos de la cuenta, deja subir el com
 
 No modifica el plugin de transferencia de pretix. No es un producto de pretix GmbH.
 
-Autor: Bryan Tandayamo. Versión 2.0.0. Requiere pretix 2025.7 o superior (probado en 2026.9).
+Autor: Bryan Tandayamo. Versión 2.0.1. Requiere pretix 2025.7 o superior (probado en 2026.9).
 
 ## Cómo funciona
 
@@ -14,7 +14,8 @@ Autor: Bryan Tandayamo. Versión 2.0.0. Requiere pretix 2025.7 o superior (proba
 4. Al crear el pedido, el comprobante y las respuestas quedan guardados en el pago, aunque cierre la pestaña enseguida.
 5. El correo del pedido incluye los datos de la cuenta, el monto y el código de referencia.
 6. En su pedido, el comprador ve sus respuestas y su comprobante, y puede reemplazarlo desde «Cambiar método de pago».
-7. En el backend, cada pago muestra su propio comprobante (miniatura, clic para verlo completo), la fecha de subida y las respuestas. La subida queda en el historial del pedido.
+7. Cada pago tiene su propio comprobante y sus propias respuestas. Si confirmas solo una parte del pago (un abono), el pago del saldo pide un comprobante nuevo (si es obligatorio) y empieza sin respuestas: no reutiliza los del pago anterior. Solo al reintentar un pago que aún no confirmaste se conserva lo que el comprador ya envió.
+8. En el backend, cada pago muestra su propio comprobante (miniatura, clic para verlo completo), la fecha de subida y las respuestas. La subida queda en el historial del pedido.
 
 ## Instalar en Docker
 

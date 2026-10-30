@@ -1,5 +1,14 @@
 # Cambios
 
+## 2.0.1
+
+Corregido:
+
+- Abonos (pagos parciales): después de confirmar una parte del pago, el pago del saldo reutilizaba el comprobante del pago anterior. No exigía uno nuevo aunque fuera obligatorio, mostraba «Ya subiste el comprobante» y, si el comprador continuaba sin elegir archivo, copiaba el comprobante viejo al pago nuevo. También rellenaba el formulario con las respuestas del pago anterior.
+
+  Ahora cada pago tiene su propio comprobante y sus propias respuestas. El comprobante y las respuestas solo pasan al pago nuevo cuando el comprador reintenta un pago que sigue abierto (pendiente). Un pago que ya estaba confirmado, cancelado o fallido nunca se reutiliza. Esto aplica tanto si el organizador confirma la transferencia con un monto menor como si marca el pedido como pagado con un monto parcial.
+- Caso raro, relacionado: si fallaba el guardado al crear el pedido, el comprobante del checkout que quedaba pendiente podía adjuntarse a un pago posterior (por ejemplo, un abono). Ahora solo se adjunta al pago del checkout.
+
 ## 2.0.0
 
 Corregido (pendientes reportados):

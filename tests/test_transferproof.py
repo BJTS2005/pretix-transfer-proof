@@ -2,11 +2,16 @@
 import io
 import json
 import re
+from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 from bs4 import BeautifulSoup
 from django import forms
 from django.core import mail as djmail
+from django.core.files.base import ContentFile
+from django.test import Client
+from django.utils.timezone import now
 from django_scopes import scopes_disabled
 from PIL import Image
 from tp_helpers import BANK, login_admin, pay_post, png_bytes, upload
@@ -15,6 +20,7 @@ from pretix.base.models import Order, OrderPayment
 
 PAYMENT = "/org/fest/checkout/payment/"
 CONFIRM = "/org/fest/checkout/confirm/"
+CONTROL_ORDERS = "/control/event/org/fest/orders/"
 
 
 def soup(r):
@@ -56,6 +62,43 @@ def proof_bytes(payment):
             return f.read()
         finally:
             f.close()
+
+
+def has_proof(payment):
+    from pretix_transferproof.models import TransferProof
+    with scopes_disabled():
+        return TransferProof.objects.filter(payment_id=payment.pk).exists()
+
+
+def color(payment):
+    return Image.open(io.BytesIO(proof_bytes(payment))).convert("RGB").getpixel((0, 0))
+
+
+def answers(payment):
+    with scopes_disabled():
+        payment.refresh_from_db()
+    return [a["value"] for a in payment.info_data["transferproof_answers"]]
+
+
+def organizer_client(tp):
+    admin = Client()
+    login_admin(tp, admin)
+    return admin
+
+
+def organizer_takes_partial_payment(admin, order, how="confirm"):
+    """The organizer registers 5.00 of the 15.00 as received, so the order stays pending (an abono)."""
+    transfer = payment_of(order)
+    data = {"amount": "5.00", "payment_date": now().date().isoformat()}
+    if how == "confirm":  # "Confirm payment" on the transfer, lowering the amount
+        r = admin.post(f"{CONTROL_ORDERS}{order.code}/payments/{transfer.pk}/confirm", data)
+    else:  # "Mark as paid" with a smaller amount: pretix cancels the transfer and adds a manual payment
+        r = admin.post(f"{CONTROL_ORDERS}{order.code}/transition", dict(data, status="p"))
+    assert r.status_code == 302
+    with scopes_disabled():
+        order.refresh_from_db()
+        assert order.status == Order.STATUS_PENDING and order.pending_sum == Decimal("10.00")
+    return transfer
 
 
 # ======================================================================= the user's list
@@ -114,7 +157,7 @@ def test_retry_same_payment_replaces_receipt_and_answers(tp):
     assert payment.info_data["transferproof_answers"][1]["value"] == "REF-999"
 
 
-def test_change_method_without_new_file_keeps_previous_receipt(tp):
+def test_retry_via_change_method_keeps_receipt_of_the_open_payment(tp):
     pay_post(tp.client)
     order, _ = place_order(tp)
     old = payment_of(order)
@@ -128,6 +171,20 @@ def test_change_method_without_new_file_keeps_previous_receipt(tp):
     assert proof_bytes(new) == original
     new.refresh_from_db()
     assert new.info_data["transferproof_answers"][1]["value"] == "REF-777"
+
+
+def test_failed_retry_still_keeps_receipt_of_the_open_payment(tp):
+    pay_post(tp.client)
+    order, _ = place_order(tp)
+    original = proof_bytes(payment_of(order))
+    change = f"/org/fest/order/{order.code}/{order.secret}/pay/change"
+    assert pay_post(tp.client, url=change, receipt=False, ref="").status_code == 200  # required answer missing
+    assert "Ya subiste el comprobante" in text(tp.client.get(change))
+    r = pay_post(tp.client, url=change, receipt=False, ref="REF-321")
+    assert r.status_code == 302
+    tp.client.post(r["Location"])
+    new = payment_of(order)
+    assert proof_bytes(new) == original and answers(new)[1] == "REF-321"
 
 
 def test_optional_receipt_is_not_dropped_when_continuing_again(tp):
@@ -161,6 +218,68 @@ def test_receipts_from_version_1_are_still_shown(tp, client):
         TransferProof.objects.filter(payment=p).update(extra_answers={"Referencia": "V1-555"})
     login_admin(tp, client)
     assert "V1-555" in text(client.get(f"/control/event/org/fest/orders/{order.code}/"))
+
+
+# ======================================================================= partial payments (abonos)
+@pytest.mark.parametrize("how", ["confirm", "mark_paid"])
+def test_partial_payment_asks_for_its_own_receipt(tp, how):
+    pay_post(tp.client)
+    order, _ = place_order(tp)
+    transfer = organizer_takes_partial_payment(organizer_client(tp), order, how)
+    before = proof_bytes(transfer)
+    change = f"/org/fest/order/{order.code}/{order.secret}/pay/change"
+    r = tp.client.get(change)
+    assert "Ya subiste" not in text(r) and "El comprobante es obligatorio" in text(r)
+    assert not value(soup(r), "payment_transferproof-extra_1")  # the first transfer's answers are not reused
+    r = pay_post(tp.client, url=change, receipt=False, ref="ABONO-1")
+    assert r.status_code == 200
+    assert soup(r).select_one(".has-error [name='payment_transferproof-receipt']") is not None
+    new = payment_of(order)
+    assert new.pk != transfer.pk and not has_proof(new)
+    assert proof_bytes(transfer) == before
+
+
+def test_partial_payment_keeps_its_own_receipt_and_answers(tp):
+    pay_post(tp.client)  # red receipt, Pichincha / REF-123
+    order, _ = place_order(tp)
+    admin = organizer_client(tp)
+    transfer = organizer_takes_partial_payment(admin, order)
+    order_url = f"/org/fest/order/{order.code}/{order.secret}/"
+    r = pay_post(tp.client, url=order_url + "pay/change", bank="Guayaquil", ref="ABONO-2",
+                 file=upload("abono.png", png_bytes(color=(0, 0, 255))))
+    assert r.status_code == 302 and r["Location"].endswith("/confirm")
+    page = text(tp.client.get(r["Location"]))
+    assert "Comprobante adjunto" in page and "ABONO-2" in page and "REF-123" not in page
+    tp.client.post(r["Location"])
+
+    new = payment_of(order)
+    assert new.pk != transfer.pk and new.amount == Decimal("10.00")
+    assert color(new) == (0, 0, 255) and answers(new) == ["Guayaquil", "ABONO-2"]
+    assert color(transfer) == (200, 30, 30) and answers(transfer) == ["Pichincha", "REF-123"]
+    assert "Recibimos tu comprobante" in text(tp.client.get(order_url))
+    for p in (transfer, new):
+        r = admin.get(f"{CONTROL_ORDERS}{order.code}/transferproof/{p.pk}/")
+        assert b"".join(r.streaming_content) == proof_bytes(p)
+
+
+def test_checkout_upload_left_in_order_meta_never_goes_to_a_later_payment(tp):
+    """Safety net for a failed order_placed hook: that upload belongs to the checkout payment only."""
+    from pretix.base.models import CachedFile
+    pay_post(tp.client)
+    order, _ = place_order(tp)
+    organizer_takes_partial_payment(organizer_client(tp), order)
+    with scopes_disabled():
+        cf = CachedFile.objects.create(expires=now() + timedelta(days=1), date=now(), filename="viejo.png",
+                                       type="image/png", web_download=False)
+        cf.file.save("viejo.png", ContentFile(png_bytes(color=(0, 255, 0))))
+        order.meta_info = json.dumps({"transferproof": {"cf": str(cf.id), "answers": []}})
+        order.save(update_fields=["meta_info"])
+    order_url = f"/org/fest/order/{order.code}/{order.secret}/"
+    pay_post(tp.client, url=order_url + "pay/change", receipt=False, ref="ABONO-1")  # rejected: no receipt
+    new = payment_of(order)
+    r = tp.client.post(f"{order_url}pay/{new.pk}/confirm", follow=True)  # e.g. reached from the browser history
+    assert r.redirect_chain[-1][0].endswith(f"/pay/{new.pk}/")  # "incomplete": asked for the receipt again
+    assert not has_proof(new)
 
 
 # ======================================================================= robustness

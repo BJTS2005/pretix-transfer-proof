@@ -15,6 +15,8 @@ from .images import validate_and_reencode
 
 CHECKOUT_STATE = "transferproof"  # key inside the cart session
 ORDER_FLOW_URLS = ("event.order.pay", "event.order.pay.confirm", "event.order.pay.complete")
+OPEN_STATES = (OrderPayment.PAYMENT_STATE_CREATED, OrderPayment.PAYMENT_STATE_PENDING)
+CLOSED_STATES = (OrderPayment.PAYMENT_STATE_CONFIRMED, OrderPayment.PAYMENT_STATE_REFUNDED)
 
 
 def payment_state_key(payment):
@@ -113,6 +115,43 @@ class TransferProofProvider(BasePaymentProvider):
             ).select_related("order").first()
         return cache[key]
 
+    def _replaced_payment(self, request, order):
+        """
+        "Change payment method" makes pretix create a new payment and cancel the order's open one.
+        If that open payment is ours, the new one only retries it (same transfer): what the buyer
+        already sent carries over. Nothing else is ever reused: after a confirmed payment (e.g. a
+        partial payment) the next one is a new transfer with its own receipt and answers.
+        Cached per request because pretix renders the form before it replaces the payment.
+        """
+        cache = request.__dict__.setdefault("_transferproof_replaced", {})
+        if order.pk not in cache:
+            last = order.payments.last()
+            ok = last is not None and last.provider == self.identifier and last.state in OPEN_STATES
+            cache[order.pk] = last if ok else None
+        return cache[order.pk]
+
+    def _source_payment(self, request, order=None):
+        """Payment the form starts from: the one being paid, the open one a retry replaces, or None."""
+        payment = self._order_flow_payment(request)
+        if payment is not None:
+            return payment
+        return self._replaced_payment(request, order) if order is not None else None
+
+    @staticmethod
+    def _payment_state(request, payment):
+        return (request.session.get(payment_state_key(payment)) or {}) if payment is not None else {}
+
+    @staticmethod
+    def _carried_proof(state, order):
+        """Receipt a retry took over from the open payment it replaced (never one of a confirmed payment)."""
+        from .models import TransferProof
+
+        if not state.get("carry_from"):
+            return None
+        return TransferProof.objects.filter(pk=state["carry_from"], payment__order=order).exclude(
+            payment__state__in=CLOSED_STATES,
+        ).select_related("payment").first()
+
     def _checkout_state(self, request):
         from pretix.presale.views.cart import cart_session
 
@@ -134,22 +173,17 @@ class TransferProofProvider(BasePaymentProvider):
         fields.update(extra_fields.form_fields(self.fields))
         return fields
 
-    def _order_answers(self, order):
-        for p in order.payments.filter(provider=self.identifier).order_by("-pk"):
-            answers = proofs.answers_of(p)
-            if answers:
-                return answers
-        return []
-
     def _stored_answers(self, request, order=None):
-        """Answers to pre-fill: what the buyer already typed, so nothing has to be entered twice."""
-        payment = self._order_flow_payment(request)
-        if payment is not None:  # retrying an existing payment
-            state = request.session.get(payment_state_key(payment)) or {}
-            return state.get("answers") or proofs.answers_of(payment) or self._order_answers(payment.order)
-        if order is not None:  # "change payment method" page
-            return self._order_answers(order)
-        return self._checkout_state(request).get("answers") or []
+        """
+        Answers to pre-fill: what was already typed for this payment (or for the open payment a retry
+        replaces), so nothing has to be entered twice. A new payment, e.g. a partial one, starts empty.
+        """
+        if self._order_flow_payment(request) is None and order is None:  # checkout
+            return self._checkout_state(request).get("answers") or []
+        source = self._source_payment(request, order)
+        if source is None:
+            return []
+        return self._payment_state(request, source).get("answers") or proofs.answers_of(source)
 
     def payment_form(self, request, order=None):
         # The same request renders the form and then validates it (checkout_prepare/payment_prepare):
@@ -180,22 +214,26 @@ class TransferProofProvider(BasePaymentProvider):
         return bool(request.POST.get(name)) and name not in request.FILES
 
     def _current_receipt(self, request, order=None):
-        """The receipt the buyer already sent, to show it instead of asking again (None if none)."""
-        payment = self._order_flow_payment(request)
-        if payment is None and order is None:  # checkout
+        """
+        The receipt this payment already has, to show it instead of asking again (None if none): an
+        upload kept in the session, the receipt of the open payment a retry replaces, or its own.
+        Receipts of other payments never count: a partial payment needs its own receipt.
+        """
+        if self._order_flow_payment(request) is None and order is None:  # checkout
             cf = proofs.cached_file(self._checkout_state(request).get("cf"))
             return {"name": cf.filename} if cf else None
-        if payment is not None:
-            state = request.session.get(payment_state_key(payment)) or {}
-            cf = proofs.cached_file(state.get("cf"))
-            if cf:
-                return {"name": cf.filename}
-            proof = proofs.proof_of(payment) or proofs.latest_proof_of_order(payment.order)
-        else:
-            proof = proofs.latest_proof_of_order(order)
+        source = self._source_payment(request, order)
+        if source is None:
+            return None
+        state = self._payment_state(request, source)
+        cf = proofs.cached_file(state.get("cf"))
+        if cf:
+            return {"name": cf.filename}
+        proof = self._carried_proof(state, source.order) or proofs.proof_of(source)
         if not proof:
             return None
-        return {"name": proof.original_name or "comprobante", "url": self.proof_url(proof.payment)}
+        owner = source if proof.payment_id == source.pk else proof.payment
+        return {"name": proof.original_name or "comprobante", "url": self.proof_url(owner)}
 
     def payment_form_render(self, request, total=None, order=None) -> str:
         template = get_template("pretix_transferproof/checkout_payment_form.html")
@@ -236,9 +274,10 @@ class TransferProofProvider(BasePaymentProvider):
             state = request.session.get(payment_state_key(payment))
             if state is not None:
                 answers = state.get("answers") or []
-                has_file = bool(proofs.cached_file(state.get("cf")) or state.get("copy_from"))
+                has_file = bool(proofs.cached_file(state.get("cf")) or self._carried_proof(state, payment.order)
+                                or proofs.proof_of(payment))
             else:  # e.g. right after checkout: everything already sits on the payment (or the order meta)
-                pending = proofs.pending_from_meta(payment.order) or {}
+                pending = proofs.pending_for(payment) or {}
                 answers = proofs.answers_of(payment) or pending.get("answers") or []
                 has_file = bool(proofs.proof_of(payment) or proofs.cached_file(pending.get("cf")))
         else:
@@ -251,8 +290,8 @@ class TransferProofProvider(BasePaymentProvider):
     def checkout_confirm_render(self, request, order=None, info_data=None) -> str:
         payment = self._order_flow_payment(request)
         if payment is not None:
-            state = request.session.get(payment_state_key(payment)) or {}
-            answers = state.get("answers", proofs.answers_of(payment))
+            state = self._payment_state(request, payment)
+            answers = state["answers"] if "answers" in state else proofs.answers_of(payment)
             receipt = self._current_receipt(request)
         else:
             state = self._checkout_state(request)
@@ -267,8 +306,24 @@ class TransferProofProvider(BasePaymentProvider):
         }, request=request)
 
     # ------------------------------------------------------------------ retry / change payment method
+    def _take_over(self, request, replaced, payment):
+        """A retry: pretix replaced the open payment ``replaced`` by ``payment``; what was sent carries over."""
+        old = request.session.pop(payment_state_key(replaced), None) or {}
+        state = {"answers": old.get("answers") or proofs.answers_of(replaced)}
+        if proofs.cached_file(old.get("cf")):
+            state["cf"] = old["cf"]
+        else:
+            carried = self._carried_proof(old, payment.order) or proofs.proof_of(replaced)
+            if carried is not None:
+                state["carry_from"] = carried.pk
+        request.session[payment_state_key(payment)] = state
+
     def payment_prepare(self, request, payment):
+        """``payment`` is retried (/pay/<id>/) or was just created by "change payment method"."""
         form = self.payment_form(request, payment.order)
+        source = self._source_payment(request, payment.order)
+        if source is not None and source.pk != payment.pk:
+            self._take_over(request, source, payment)  # stored right away so a failed attempt keeps it
         if self._file_not_sent(request):
             messages.error(request, _("Tu navegador no envió la imagen. Recarga la página e inténtalo de nuevo."))
             return False
@@ -283,31 +338,24 @@ class TransferProofProvider(BasePaymentProvider):
             state["cf"] = proofs.store_upload(request, new_file)
         elif proofs.cached_file(old.get("cf")):
             state["cf"] = old["cf"]  # uploaded in an earlier attempt that was not confirmed yet
-        else:
-            # Keep the receipt the buyer already sent for this order, unless they upload a new one.
-            existing = proofs.proof_of(payment) or proofs.latest_proof_of_order(payment.order)
-            if existing:
-                state["copy_from"] = existing.pk
-            elif self.receipt_required:
-                form.add_error("receipt", _("Sube el comprobante para continuar."))
-                messages.error(request, _("Sube el comprobante para continuar."))
-                return False
+        elif self._carried_proof(old, payment.order):
+            state["carry_from"] = old["carry_from"]  # retry of an open payment that already had it
+        elif self.receipt_required and not proofs.proof_of(payment):
+            # A new payment (e.g. a partial one after a confirmed payment) always needs its own receipt.
+            form.add_error("receipt", _("Sube el comprobante para continuar."))
+            messages.error(request, _("Sube el comprobante para continuar."))
+            return False
         request.session[key] = state
         return True
 
     def execute_payment(self, request, payment):
-        from .models import TransferProof
-
         key = payment_state_key(payment)
         state = request.session.get(key) if request is not None else None
         if state is not None:
-            copy_from = TransferProof.objects.filter(
-                pk=state.get("copy_from"), payment__order=payment.order,
-            ).first() if state.get("copy_from") else None
-            proofs.attach(payment, answers=state.get("answers") or [],
-                          cf=proofs.cached_file(state.get("cf")), copy_from=copy_from)
+            proofs.attach(payment, answers=state.get("answers") or [], cf=proofs.cached_file(state.get("cf")),
+                          copy_from=self._carried_proof(state, payment.order))
             request.session.pop(key, None)
-        elif proofs.pending_from_meta(payment.order):
+        elif proofs.pending_for(payment):
             proofs.attach_from_order_meta(payment.order)  # safety net if the order_placed hook failed
         if self.receipt_required and not proofs.proof_of(payment):
             raise PaymentException(_("Falta el comprobante de transferencia. Súbelo para completar el pago."))

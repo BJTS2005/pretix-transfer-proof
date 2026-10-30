@@ -72,15 +72,11 @@ def answers_of(payment):
     return []
 
 
-def latest_proof_of_order(order):
-    return TransferProof.objects.filter(payment__order=order).select_related("payment").order_by("-created").first()
-
-
 # ----------------------------------------------------------------------------- writing
 def attach(payment, *, answers=None, cf=None, copy_from=None):
     """
     Saves answers and/or a receipt on ``payment``. ``cf`` is a CachedFile with a new upload,
-    ``copy_from`` an existing TransferProof (e.g. of the payment this one replaces).
+    ``copy_from`` the TransferProof of the open payment that a retry replaced.
     A new receipt replaces the previous one of the same payment.
     """
     with transaction.atomic():
@@ -134,12 +130,26 @@ def pending_from_meta(order):
     return None
 
 
+def checkout_payment(order):
+    """The payment created at checkout: the upload/answers kept in the order meta belong to it."""
+    return order.payments.filter(provider="transferproof").order_by("local_id").first()
+
+
+def pending_for(payment):
+    """Checkout upload/answers still in the order meta, only if they belong to ``payment``."""
+    data = pending_from_meta(payment.order)
+    if data is None:
+        return None
+    first = checkout_payment(payment.order)
+    return data if first is not None and first.pk == payment.pk else None
+
+
 def attach_from_order_meta(order):
-    """Moves the checkout upload/answers (kept in the order meta) onto the order's payment."""
+    """Moves the checkout upload/answers (kept in the order meta) onto the checkout's payment."""
     data = pending_from_meta(order)
     if data is None:
         return False
-    payment = order.payments.filter(provider="transferproof").order_by("-pk").first()
+    payment = checkout_payment(order)
     if not payment:
         return False
     attach(payment, answers=data.get("answers") or [], cf=cached_file(data.get("cf")))
