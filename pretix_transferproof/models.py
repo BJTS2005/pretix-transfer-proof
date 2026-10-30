@@ -28,6 +28,7 @@ class TransferProof(models.Model):
     file = models.FileField(upload_to=proof_path, max_length=255)
     original_name = models.CharField(max_length=255, blank=True)
     created = models.DateTimeField(auto_now_add=True)
+    extra_answers = models.JSONField(default=dict, blank=True)
 
     class Meta:
         app_label = "pretix_transferproof"

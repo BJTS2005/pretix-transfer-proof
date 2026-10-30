@@ -113,6 +113,19 @@ class TransferProofProvider(BasePaymentProvider):
                         ),
                     ),
                 ),
+                (
+                    "extra_fields",
+                    forms.CharField(
+                        label=_("Campos adicionales"),
+                        required=False,
+                        widget=forms.Textarea(attrs={"rows": 8, "class": "extra-fields-json"}),
+                        help_text=_(
+                            "JSON de campos que el comprador debe llenar. "
+                            "Ejemplo: [{"label":"Referencia","type":"text","required":true}, "
+                            "{"label":"Banco","type":"choice","required":false,"options":["Pichincha","Guayaquil"]}]"
+                        ),
+                    ),
+                ),
             ]
         )
 
@@ -120,9 +133,20 @@ class TransferProofProvider(BasePaymentProvider):
     def test_mode_message(self):
         return _("En modo prueba el pago sigue pendiente hasta que lo marques pagado en el backend.")
 
+
+    def get_extra_fields(self):
+        raw = self.settings.get("extra_fields") or "[]"
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(data, list):
+                return []
+            return [f for f in data if isinstance(f, dict) and f.get("label")]
+        except Exception:
+            return []
+
     def payment_form_fields(self):
         required = self.settings.get("receipt_required", as_type=bool)
-        return OrderedDict(
+        fields = OrderedDict(
             [
                 (
                     "receipt",
@@ -134,6 +158,24 @@ class TransferProofProvider(BasePaymentProvider):
                 )
             ]
         )
+        for i, fdef in enumerate(self.get_extra_fields()):
+            key = f"extra_{i}"
+            label = fdef.get("label", f"Campo {i+1}")
+            req = bool(fdef.get("required"))
+            if fdef.get("type") == "choice":
+                choices = [(o, o) for o in (fdef.get("options") or []) if o]
+                fields[key] = forms.ChoiceField(
+                    label=label,
+                    required=req,
+                    choices=[("", "---")] + choices,
+                )
+            else:
+                fields[key] = forms.CharField(
+                    label=label,
+                    required=req,
+                    widget=forms.TextInput(),
+                )
+        return fields
 
     def payment_form(self, request):
         selected = request.method == "POST" and request.POST.get("payment") == self.identifier
@@ -249,7 +291,18 @@ class TransferProofProvider(BasePaymentProvider):
         if request is not None and not cf.allowed_for_session(request):
             raise PaymentException(_("El comprobante no corresponde a esta sesión."))
 
-        proof = TransferProof(payment=payment, original_name=cf.filename or "receipt.jpg")
+        # collect extra field answers
+        extra = {}
+        if request is not None:
+            form = self.payment_form(request)
+            if form.is_valid():
+                for i, fdef in enumerate(self.get_extra_fields()):
+                    key = f"extra_{i}"
+                    val = form.cleaned_data.get(key)
+                    if val:
+                        extra[fdef.get("label", key)] = str(val)
+
+        proof = TransferProof(payment=payment, original_name=cf.filename or "receipt.jpg", extra_answers=extra)
         proof.file.save(cf.filename or "receipt.jpg", cf.file, save=False)
         proof.save()
         cf.delete()

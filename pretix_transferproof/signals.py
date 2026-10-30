@@ -14,7 +14,7 @@ def register_payment_provider(sender, **kwargs):
 
 @receiver(html_head, dispatch_uid="transferproof_html_head")
 def transferproof_html_head(sender, request=None, **kwargs):
-    return '<script src="%s"></script>' % static("pretix_transferproof/checkout.js")
+    return '<script src="%s"></script><script src="%s"></script>' % (static("pretix_transferproof/checkout.js"), static("pretix_transferproof/extra_fields.js"))
 
 
 @receiver(order_meta_from_request, dispatch_uid="transferproof_order_meta")
@@ -40,3 +40,23 @@ def transferproof_footer_link(sender, request=None, **kwargs):
         "label": "Código del plugin de transferencia",
         "url": "https://github.com/BJTS2005/pretix-transfer-proof",
     }
+
+
+@receiver(register_payment_providers, dispatch_uid="payment_transferproof_info")
+def dummy():
+    pass
+
+from pretix.control.signals import order_info
+
+@receiver(order_info, dispatch_uid="transferproof_order_info")
+def transferproof_order_info(sender, order=None, **kwargs):
+    from django.utils.safestring import mark_safe
+    from .models import TransferProof
+    proof = TransferProof.objects.filter(payment__order=order).first()
+    if not proof or not proof.extra_answers:
+        return ""
+    lines = ["<strong>Datos adicionales de transferencia:</strong><ul>"]
+    for label, value in proof.extra_answers.items():
+        lines.append(f"<li><strong>{label}:</strong> {value}</li>")
+    lines.append("</ul>")
+    return mark_safe("".join(lines))
