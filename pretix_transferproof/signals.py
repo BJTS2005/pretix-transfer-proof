@@ -42,10 +42,6 @@ def transferproof_footer_link(sender, request=None, **kwargs):
     }
 
 
-@receiver(register_payment_providers, dispatch_uid="payment_transferproof_info")
-def dummy():
-    pass
-
 from pretix.control.signals import order_info
 
 @receiver(order_info, dispatch_uid="transferproof_order_info")
